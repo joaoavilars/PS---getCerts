@@ -1,0 +1,25 @@
+## Sobre o certs_*.ps1:
+
+
+lista todos os certificados de clientes instalados e gera um json com uma lista deles e suas validades.
+
+Execução:
+./certs.ps1 -OutputFile C:\temp\certs.json
+
+ou 
+
+powershell C:\caminho para o script\certs.ps1 -OutputFile c:\temp\certs.json
+
+
+
+
+## Sobre o selfsign.ps1
+
+cria um arquivo com a quantidade de dias restantes para o vencimento do certificado autoassinado ativo.
+
+Execução:
+./selfsign.ps1 > c:\temp\dias
+
+ou
+
+powershell C:\caminho para o script\selfsign.ps1 > c:\temp\dias
