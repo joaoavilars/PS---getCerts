@@ -17,15 +17,30 @@ foreach ($Cert in $MyCerts) {
         $DaysRemaining = $TimeSpan.Days
         $ExpirationDate = $CertExp.ToShortDateString()
         $Subject = $Cert.Subject -replace '^CN=(.*?),.*', '$1'
-        
-        # Extrair o CNPJ do campo DnsNameList
-        $DnsNameList = $Cert.DnsNameList
+
+        # Exibir mensagem de depuração com o nome da empresa
+        Write-Host "Empresa encontrada: $Subject"
+
+        # Extrair todas as instâncias de OU no campo Subject
+        $OUs = [regex]::Matches($Cert.Subject, 'OU=([^,]+)')
+
+        # Exibir todos os OUs encontrados
+        Write-Host "OUs encontrados: $($OUs | ForEach-Object { $_.Groups[1].Value })"
+
         $CNPJ = $null
-        foreach ($DnsName in $Cert.DnsNameList) {
-            if ($DnsName -match '.*:(\d{14})$') {
-                $CNPJ = [int64]$matches[1]  # Convertendo o CNPJ para número inteiro de 64 bits
-                break  # Parar o loop quando o CNPJ for encontrado
+        foreach ($OU in $OUs) {
+            $OUValue = $OU.Groups[1].Value
+            
+            # Verificar se o valor encontrado é um CNPJ válido (14 dígitos)
+            if ($OUValue -match '^\d{14}$') {
+                $CNPJ = $OUValue
+                Write-Host "CNPJ válido encontrado: $CNPJ"
+                break  # Interromper a busca ao encontrar o CNPJ
             }
+        }
+
+        if ($CNPJ -eq $null) {
+            Write-Host "Nenhum CNPJ válido encontrado para: $Subject"
         }
 
         # Criar um objeto PS personalizado
