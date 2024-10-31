@@ -16,36 +16,39 @@ foreach ($Cert in $MyCerts) {
     if ($TimeSpan.Days -le $WarningThreshold -and $TimeSpan.Days -ge 0) {
         $DaysRemaining = $TimeSpan.Days
         $ExpirationDate = $CertExp.ToShortDateString()
-        $Subject = $Cert.Subject -replace '^CN=(.*?),.*', '$1'
 
-        # Exibir mensagem de depuração com o nome da empresa
-        Write-Host "Empresa encontrada: $Subject"
-
-        # Extrair todas as instâncias de OU no campo Subject
-        $OUs = [regex]::Matches($Cert.Subject, 'OU=([^,]+)')
-
-        # Exibir todos os OUs encontrados
-        Write-Host "OUs encontrados: $($OUs | ForEach-Object { $_.Groups[1].Value })"
-
+        # Extrair o nome da empresa do campo CN
+        $Subject = $Cert.GetNameInfo([System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)
+        
+        # Remover números e dois pontos do nome da empresa
+        $SubjectClean = $Subject -replace '\d+', '' -replace '\s+', ' ' -replace '^\s+|\s+$', '' -replace ':+$', ''
+        
+        # Inicializar o CNPJ como null
         $CNPJ = $null
-        foreach ($OU in $OUs) {
-            $OUValue = $OU.Groups[1].Value
-            
-            # Verificar se o valor encontrado é um CNPJ válido (14 dígitos)
-            if ($OUValue -match '^\d{14}$') {
-                $CNPJ = $OUValue
-                Write-Host "CNPJ válido encontrado: $CNPJ"
-                break  # Interromper a busca ao encontrar o CNPJ
+
+        # Tentar extrair o CNPJ da extensão específica do certificado
+        $CNPJExtension = $Cert.Extensions | Where-Object { $_.Oid.Value -eq "2.16.76.1.3.3" }
+        if ($CNPJExtension) {
+            $CNPJ = $CNPJExtension.Format($false) -replace '[^\d]', ''
+            Write-Host "CNPJ encontrado na extensão: $CNPJ para $SubjectClean"
+        }
+
+        # Se não encontrar na extensão, procurar no campo Subject inteiro o primeiro número de 14 dígitos
+        if (-not $CNPJ) {
+            if ($Cert.Subject -match '(\d{14})') {
+                $CNPJ = $Matches[1]
+                Write-Host "CNPJ encontrado no Subject: $CNPJ para $SubjectClean"
             }
         }
 
-        if ($CNPJ -eq $null) {
-            Write-Host "Nenhum CNPJ válido encontrado para: $Subject"
+        # Se ainda não encontrar, exibir mensagem de aviso
+        if (-not $CNPJ) {
+            Write-Host "Nenhum CNPJ válido encontrado para: $SubjectClean"
         }
 
         # Criar um objeto PS personalizado
         $result = [PSCustomObject]@{
-            enterprise    = "${Subject}:${CNPJ}"
+            enterprise    = $SubjectClean
             expire_date   = $ExpirationDate
             days          = $DaysRemaining
             cnpj          = $CNPJ
@@ -56,5 +59,8 @@ foreach ($Cert in $MyCerts) {
     }
 }
 
+# Remover entradas duplicadas com base no CNPJ
+$results = $results | Where-Object { $_.cnpj } | Group-Object cnpj | ForEach-Object { $_.Group | Select-Object -First 1 }
+
 # Converter o array de objetos para JSON e salvar no arquivo de saída
-$results | ConvertTo-Json | Out-File -FilePath $OutputFile -Encoding utf8
+$results | ConvertTo-Json -Depth 5 | Out-File -FilePath $OutputFile -Encoding utf8
